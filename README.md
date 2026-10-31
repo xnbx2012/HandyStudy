@@ -32,7 +32,9 @@
 | `android-universal.apk` | 通用 Android 8.0+，不含 vivo 原生预测库 |
 | `android-arm64-v8a.apk` | ARM64 设备，包含 vivo/iQOO 手写笔增强库 |
 
-安装后，在 **设置 → 智能伴学** 中添加自己的模型服务。公开版本内置原创示例题；其它题库可按 [题库格式](docs/BANK_FORMAT.md) 自行制作并导入。原始教材、题库扫描件和个人学习数据不属于本仓库或 Release。
+安装后，在 **设置 → 智能伴学** 中添加自己的模型服务。公开版本内置原创示例题。
+
+**题库下载：** [百度网盘下载题库](https://pan.baidu.com/s/1WoEBFOmu-XpoZu6rtlIsZw?pwd=hgsn)（提取码：`hgsn`）。下载后在应用内选择 **导入题库 ZIP**。也可按 [题库格式](docs/BANK_FORMAT.md) 自行制作题库。网盘题库由外部链接单独提供，不属于本仓库或 GitHub Release 的 MIT 授权范围。
 
 ## 🛠️ 从源码构建
 

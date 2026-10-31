@@ -32,7 +32,9 @@ Download an APK from [Releases](https://github.com/xnbx2012/HandyStudy/releases/
 | `android-universal.apk` | Android 8.0+, without the vivo native prediction library |
 | `android-arm64-v8a.apk` | ARM64 devices, with vivo/iQOO stylus enhancement |
 
-Configure your model under **Settings → AI companion**. The public app includes an original sample bank. You can create and import other banks using the [bank format](docs/BANK_FORMAT.md). Copyrighted textbooks, scanned question banks, and personal study data are excluded from this repository and releases.
+Configure your model under **Settings → AI companion**. The public app includes an original sample bank.
+
+**Question banks:** [Download from Baidu Netdisk](https://pan.baidu.com/s/1WoEBFOmu-XpoZu6rtlIsZw?pwd=hgsn) (extraction code: `hgsn`), then use **Import question bank ZIP** in the app. You can also create your own banks using the [bank format](docs/BANK_FORMAT.md). The externally hosted banks are separate from this repository and GitHub Releases and are not covered by the MIT license.
 
 ## 🛠️ Build
 
