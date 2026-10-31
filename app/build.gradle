@@ -2,7 +2,7 @@ plugins { id 'com.android.application' }
 android {
     namespace 'com.handymath.app'
     compileSdk 36
-    defaultConfig { applicationId 'com.handymath.app'; minSdk 26; targetSdk 35; versionCode 17; versionName '1.0.6'; testInstrumentationRunner 'com.handymath.app.MathInstrumentation' }
+    defaultConfig { applicationId 'com.handymath.app'; minSdk 26; targetSdk 35; versionCode 18; versionName '1.0.7'; testInstrumentationRunner 'com.handymath.app.MathInstrumentation' }
     compileOptions { sourceCompatibility JavaVersion.VERSION_17; targetCompatibility JavaVersion.VERSION_17 }
 }
 

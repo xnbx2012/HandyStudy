@@ -23,6 +23,6 @@ Do not commit the keystore or passwords. The workflow fails closed when secrets 
 
 ## Publish
 
-Update `versionCode` and `versionName`, merge the change, then push the matching tag, for example `v1.0.6`. The workflow builds `HandyStudy-1.0.6-android-universal.apk`, `HandyStudy-1.0.6-android-arm64-v8a.apk`, and `SHA256SUMS.txt`, and attaches them to a GitHub Release. The app's update check reads the latest release tag and opens its download page; it does not silently install packages.
+Update `versionCode` and `versionName`, merge the change, then push the matching tag, for example `v1.0.7`. The workflow builds `HandyStudy-1.0.7-android-universal.apk`, `HandyStudy-1.0.7-android-arm64-v8a.apk`, and `SHA256SUMS.txt`, and attaches them to a GitHub Release. The app's update check reads the latest release tag and opens its download page; it does not silently install packages.
 
 The public build contains only the original sample bank. It does not package third-party educational content.
