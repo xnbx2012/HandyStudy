@@ -33,11 +33,17 @@ final class StylusChecks {
     test.runOnMainSync(()->{try{
       Adapter adapter=new Adapter();InkView ink=new InkView(c,adapter);ink.layout(0,0,1000,1000);
       java.lang.reflect.Field prediction=InkView.class.getDeclaredField("prediction");prediction.setAccessible(true);
+      android.content.SharedPreferences prefs=AppSettings.prefs(c);
+      float previousStrength=prefs.getFloat("penPredictionStrength",.5f);
+      prefs.edit().putFloat("penPredictionStrength",.5f).commit();
       AtomicInteger seenPointer=new AtomicInteger(-1);
       prediction.set(ink,(StylusPrediction)e->{seenPointer.set(e.getPointerId(0));return e.getActionMasked()==MotionEvent.ACTION_MOVE?new PointF(e.getX()+20,e.getY()):null;});
       pen(ink,MotionEvent.ACTION_DOWN,100,.4f);pen(ink,MotionEvent.ACTION_MOVE,150,.7f);
       check(seenPointer.get()==7,"predictor receives correct non-zero pointer ID");
       java.lang.reflect.Field preview=InkView.class.getDeclaredField("predicted");preview.setAccessible(true);check(preview.get(ink)!=null,"prediction preview generated");
+      InkView.Dot shortened=(InkView.Dot)preview.get(ink);
+      check(Math.abs(shortened.x-ink.worldX(160))<.01f,"prediction preview extends only half the predicted distance");
+      prefs.edit().putFloat("penPredictionStrength",previousStrength).commit();
       check(ink.serialize().getJSONArray("strokes").length()==0,"uncommitted prediction excluded from saved state");
       pen(ink,MotionEvent.ACTION_UP,200,.4f);
       check(ink.strokes.size()==1&&ink.strokes.get(0).dots.size()==3,"only actual points committed");
@@ -76,9 +82,11 @@ final class StylusChecks {
       for(InkView.Dot d:ink.strokes.get(0).dots)check(d.x>=ink.worldX(500)-.01f,"palm coordinates excluded and pointer index one retained");
       int before=ink.strokes.size();send(ink,event(0,0,new int[]{2},new int[]{1},new float[]{40},new float[]{.4f}));send(ink,event(1,0,new int[]{2},new int[]{1},new float[]{60},new float[]{.4f}));check(ink.strokes.size()==before,"palm suppressed immediately after pen lift");
       ink.cancelContact();
+      int inkBeforeHover=ink.strokes.size();
       MotionEvent mouse=event(MotionEvent.ACTION_HOVER_MOVE,0,new int[]{0},new int[]{MotionEvent.TOOL_TYPE_MOUSE},new float[]{40},new float[]{0});ink.onHoverEvent(mouse);mouse.recycle();
       java.lang.reflect.Field cursor=InkView.class.getDeclaredField("cursorVisible");cursor.setAccessible(true);check(!(Boolean)cursor.get(ink),"mouse hover does not activate stylus cursor or palm lock");
       MotionEvent hover=event(MotionEvent.ACTION_HOVER_MOVE,0,new int[]{7},new int[]{2},new float[]{100},new float[]{0});ink.onHoverEvent(hover);hover.recycle();check((Boolean)cursor.get(ink),"pen hover shows brush preview");
+      check(ink.strokes.size()==inkBeforeHover&&preview.get(ink)==null,"hover never creates ink or a predicted stroke");
       ink.cancelContact();ink.finger=false;
       StylusPrediction fallback=new StylusPrediction.Vivo(ink);pen(ink,0,100,.5f);pen(ink,1,150,.5f);fallback.close();
       check(ink.hasInk(),"unavailable vivo engine leaves ordinary input usable");

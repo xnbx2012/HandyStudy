@@ -36,7 +36,8 @@ public final class SettingsActivity extends PageActivity {
     toggle("threeFingerRedo", "三指单击重做", false);
     section("书写体验", "");
     toggle("penPrediction", "低延迟笔迹预测", true);
-    label("预测仅用于屏幕预览，保存和提交只使用真实采样点。设备不支持厂商能力时自动使用 Android 兜底。");
+    slider("penPredictionStrength", "笔迹预测延伸比例", 0, 1, .5f, "（默认 0.50；0 为不延伸）");
+    label("预测仅用于屏幕预览，保存和提交只使用真实采样点。轻微连笔时可降低延伸比例。设备不支持厂商能力时自动使用 Android 兜底。");
     toggle("penHaptics", "vivo / iQOO 书写振动", false);
     section("笔压与橡皮", "控制笔触变化和自动擦除");
     toggle("pressure", "开启笔触压感", true);

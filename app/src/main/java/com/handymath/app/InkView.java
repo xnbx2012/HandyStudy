@@ -158,7 +158,10 @@ final class InkView extends View {
         float x = worldX(next.x), y = worldY(next.y);
         Dot last = current.dots.get(current.dots.size() - 1);
         if (Math.hypot(x - last.x, y - last.y) <= 32) {
-          predicted = new Dot(x, y, last.pressure, last.tilt, last.orientation);
+          float strength = AppSettings.predictionStrength(getContext());
+          if (strength <= 0f) return;
+          predicted = new Dot(last.x + (x - last.x) * strength,
+              last.y + (y - last.y) * strength, last.pressure, last.tilt, last.orientation);
           shapeHandler.postDelayed(expirePrediction, 32);
         }
       }

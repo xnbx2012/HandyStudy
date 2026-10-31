@@ -12,6 +12,9 @@ final class AppSettings {
         return value >= 0 && value < PEN_ACTIONS.length ? value : NONE;
     }
     static int retries(Context c) { return Math.max(0, Math.min(5, prefs(c).getInt("llmFormatRetries", 3))); }
+    static float predictionStrength(Context c) {
+        return Math.max(0f, Math.min(1f, prefs(c).getFloat("penPredictionStrength", .5f)));
+    }
     static SharedPreferences prefs(Context c) {
         return c.getSharedPreferences("preferences", 0);
     }

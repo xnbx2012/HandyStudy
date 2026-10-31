@@ -49,6 +49,7 @@ jobs:
         run: |
           chmod +x gradlew
           ./gradlew --no-daemon :app:assembleRelease -PstandardPenOnly
+          "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --print-certs app/build/outputs/apk/release/app-release.apk | grep -qi '49a36334aea762d12ade60486429c601e19adbf7556a48e90491a8d922d45a33'
           mkdir -p release
           cp app/build/outputs/apk/release/app-release.apk "release/HandyStudy-${RELEASE_TAG#v}-android-universal.apk"
       - name: Build ARM64 APK
@@ -60,6 +61,7 @@ jobs:
           RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
         run: |
           ./gradlew --no-daemon :app:assembleRelease -PappAbi=arm64-v8a
+          "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --print-certs app/build/outputs/apk/release/app-release.apk | grep -qi '49a36334aea762d12ade60486429c601e19adbf7556a48e90491a8d922d45a33'
           cp app/build/outputs/apk/release/app-release.apk "release/HandyStudy-${RELEASE_TAG#v}-android-arm64-v8a.apk"
           (cd release && sha256sum *.apk > SHA256SUMS.txt)
       - name: Publish GitHub Release
