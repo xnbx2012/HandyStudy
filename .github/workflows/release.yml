@@ -1,0 +1,70 @@
+name: Build and publish APKs
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Existing version tag, for example v1.0.5'
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag || github.ref }}
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: gradle
+      - uses: android-actions/setup-android@v3
+      - name: Install Android SDK
+        run: yes | sdkmanager 'platforms;android-37' 'build-tools;36.0.0'
+      - name: Validate version and signing configuration
+        env:
+          RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
+          KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          grep -q "versionName '${RELEASE_TAG#v}'" app/build.gradle
+          test -n "$KEYSTORE_BASE64" && test -n "$KEYSTORE_PASSWORD" && test -n "$KEY_ALIAS" && test -n "$KEY_PASSWORD"
+          printf '%s' "$KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/handystudy-release.jks"
+      - name: Build universal APK
+        env:
+          ANDROID_KEYSTORE_FILE: ${{ runner.temp }}/handystudy-release.jks
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
+        run: |
+          chmod +x gradlew
+          ./gradlew --no-daemon :app:assembleRelease -PstandardPenOnly
+          mkdir -p release
+          cp app/build/outputs/apk/release/app-release.apk "release/HandyStudy-${RELEASE_TAG#v}-android-universal.apk"
+      - name: Build ARM64 APK
+        env:
+          ANDROID_KEYSTORE_FILE: ${{ runner.temp }}/handystudy-release.jks
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
+        run: |
+          ./gradlew --no-daemon :app:assembleRelease -PappAbi=arm64-v8a
+          cp app/build/outputs/apk/release/app-release.apk "release/HandyStudy-${RELEASE_TAG#v}-android-arm64-v8a.apk"
+          (cd release && sha256sum *.apk > SHA256SUMS.txt)
+      - name: Publish GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
+        run: |
+          gh release create "$RELEASE_TAG" release/* --title "HandyStudy $RELEASE_TAG" --generate-notes

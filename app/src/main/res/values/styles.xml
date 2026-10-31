@@ -1,0 +1,27 @@
+<resources>
+<style name="AppTheme" parent="android:style/Theme.Material.Light.NoActionBar">
+<item name="android:fontFamily">sans</item><item name="android:colorAccent">#197D78</item>
+<item name="android:windowLightStatusBar">true</item>
+<item name="android:statusBarColor">#F1F5F4</item><item name="android:navigationBarColor">#F1F5F4</item>
+<item name="android:windowBackground">#F1F5F4</item><item name="android:colorControlActivated">#197D78</item>
+<item name="android:buttonStyle">@style/AppButton</item><item name="android:editTextStyle">@style/AppField</item>
+<item name="android:alertDialogTheme">@style/AppDialog</item>
+</style>
+<style name="AppButton" parent="android:style/Widget.Material.Button">
+<item name="android:background">@drawable/ui_button</item><item name="android:backgroundTint">@null</item>
+<item name="android:textColor">#197D78</item><item name="android:textAllCaps">false</item>
+<item name="android:textSize">14sp</item><item name="android:fontFamily">sans-serif-medium</item>
+<item name="android:minHeight">48dp</item><item name="android:paddingLeft">18dp</item><item name="android:paddingRight">18dp</item>
+<item name="android:stateListAnimator">@null</item>
+</style>
+<style name="AppField" parent="android:style/Widget.Material.EditText">
+<item name="android:background">@drawable/ui_field</item><item name="android:backgroundTint">@null</item>
+<item name="android:textColor">#233446</item><item name="android:textColorHint">#788A94</item>
+<item name="android:textSize">16sp</item><item name="android:padding">14dp</item><item name="android:minHeight">52dp</item>
+</style>
+<style name="AppDialog" parent="android:style/Theme.Material.Light.Dialog.Alert">
+<item name="android:colorAccent">#197D78</item><item name="android:fontFamily">sans</item>
+<item name="android:windowBackground">@drawable/ui_dialog</item><item name="android:windowElevation">12dp</item>
+<item name="android:buttonBarButtonStyle">@style/AppButton</item><item name="android:editTextStyle">@style/AppField</item>
+</style>
+</resources>

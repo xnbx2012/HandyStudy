@@ -1,0 +1,19 @@
+{
+  "version": 2,
+  "id": "sample",
+  "title": "示例题库",
+  "subject": "数学",
+  "unitLabel": "题",
+  "questions": [
+    {
+      "id": "sample-1",
+      "title": "等差数列",
+      "chapter": "数列",
+      "topic": "等差数列求和",
+      "type": "解答题",
+      "questionMarkdown": "已知等差数列的首项为 2，公差为 3。求前 10 项的和，并写出计算过程。",
+      "answerMarkdown": "第 10 项为 $$2+9\\times3=29$$，因此前 10 项之和为 $$\\frac{10(2+29)}{2}=155$$。",
+      "referencePolicy": "reference"
+    }
+  ]
+}

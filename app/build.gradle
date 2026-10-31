@@ -1,0 +1,46 @@
+plugins { id 'com.android.application' }
+android {
+    namespace 'com.handymath.app'
+    compileSdk 37
+    defaultConfig { applicationId 'com.handymath.app'; minSdk 26; targetSdk 35; versionCode 16; versionName '1.0.5'; testInstrumentationRunner 'com.handymath.app.MathInstrumentation' }
+    compileOptions { sourceCompatibility JavaVersion.VERSION_17; targetCompatibility JavaVersion.VERSION_17 }
+}
+
+// Android's asset merger does not honor SourceDirectorySet.exclude reliably.
+// Stage an explicit built-in allowlist so optional/retired banks cannot enter APKs.
+def builtinAssets = layout.buildDirectory.dir('builtin-assets')
+def prepareBuiltinAssets = tasks.register('prepareBuiltinAssets', Sync) {
+    from('src/main/assets')
+    include 'banks/sample/**', 'render/**'
+    into(builtinAssets)
+}
+android.sourceSets.main.assets.setSrcDirs([builtinAssets.get().asFile])
+if (project.hasProperty('appAbi')) android.defaultConfig.ndk.abiFilters.add(project.property('appAbi').toString())
+tasks.configureEach {
+    if ((name.startsWith('merge') && name.endsWith('Assets')) || name.toLowerCase().contains('lint')) {
+        dependsOn(prepareBuiltinAssets)
+    }
+}
+
+// Official Android motion prediction and vivo/iQOO pen integration.
+dependencies {
+    implementation 'androidx.input:input-motionprediction:1.0.0'
+    implementation 'vivo:penengine-simplify:1.0.0.10'
+}
+
+// vivo's native predictor is ARM64-only. Keep a no-native build available for
+// older 32-bit/Intel devices; SDK gestures/haptics and Android prediction remain.
+if (project.hasProperty('standardPenOnly')) {
+    android.packaging.jniLibs.excludes.add('**/libtrack_prediction.so')
+}
+
+// CI signs release builds with repository secrets; no keystore is committed.
+if (System.getenv('ANDROID_KEYSTORE_FILE')) {
+    android.signingConfigs { publicRelease {
+        storeFile file(System.getenv('ANDROID_KEYSTORE_FILE'))
+        storePassword System.getenv('ANDROID_KEYSTORE_PASSWORD')
+        keyAlias System.getenv('ANDROID_KEY_ALIAS')
+        keyPassword System.getenv('ANDROID_KEY_PASSWORD')
+    } }
+    android.buildTypes.release.signingConfig android.signingConfigs.publicRelease
+}

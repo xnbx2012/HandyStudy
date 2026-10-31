@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1100" height="340" viewBox="0 0 1100 340" role="img" aria-label="HandyStudy handwritten learning">
+<defs><linearGradient id="g" x2="1" y2="1"><stop stop-color="#102f38"/><stop offset="1" stop-color="#197d78"/></linearGradient><filter id="s"><feDropShadow dx="0" dy="12" stdDeviation="14" flood-opacity=".18"/></filter></defs>
+<rect width="1100" height="340" rx="28" fill="url(#g)"/><circle cx="980" cy="65" r="130" fill="#ffffff" opacity=".05"/><circle cx="70" cy="310" r="125" fill="#ffffff" opacity=".04"/>
+<text x="65" y="112" fill="#b9ece5" font-size="23" font-family="sans-serif" letter-spacing="3">HANDYSTUDY / 手写伴学</text>
+<text x="65" y="192" fill="white" font-size="62" font-weight="700" font-family="sans-serif">Write. Think. Learn.</text>
+<text x="68" y="245" fill="#d7f2ee" font-size="25" font-family="sans-serif">手写作答 · 智能批改 · 知识回顾</text>
+<g filter="url(#s)" transform="translate(730 57) rotate(5 145 120)"><rect width="285" height="235" rx="18" fill="#f9fffd"/><path d="M35 66h210M35 112h210M35 158h210M35 204h210" stroke="#d5ece8" stroke-width="2"/><text x="42" y="100" fill="#1c615d" font-size="30" font-family="serif">Σ 1 + 2 + … + n</text><path d="M55 150q70 28 155-8" fill="none" stroke="#e18b5b" stroke-width="5" stroke-linecap="round"/><path d="M208 143l-13-12" stroke="#e18b5b" stroke-width="5" stroke-linecap="round"/></g>
+</svg>

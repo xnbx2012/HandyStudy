@@ -1,0 +1,18 @@
+<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; font-src 'self'; img-src data:; connect-src 'none'">
+<link rel="stylesheet" href="katex/dist/katex.min.css">
+<style>html,body{margin:0;padding:0;background:transparent;color:#233446;font:18px/1.7 sans-serif;overflow-wrap:anywhere}#content{padding:8px 4px}p{margin:6px 0}h1,h2,h3{font-size:1.1em;margin:10px 0}ul,ol{padding-left:24px}table{border-collapse:collapse;width:100%;font-size:.9em}td,th{padding:5px;border:1px solid #d8e4e1}blockquote{border-left:3px solid #197d78;margin:8px 0;padding:0 12px;color:#647585}pre{white-space:pre-wrap;background:#f1f5f4;padding:8px}a{color:#197d78}.katex{font-size:1.17em}.katex-display{overflow-x:auto;overflow-y:hidden;padding:5px 0}.stream-spinner{display:inline-block;width:12px;height:12px;margin-left:8px;border:2px solid #d3e6e2;border-top-color:#197d78;border-radius:50%;vertical-align:middle;animation:spin .8s linear infinite}@keyframes spin{to{transform:rotate(360deg)}} </style>
+<script src="marked/lib/marked.umd.js"></script><script src="dompurify/dist/purify.min.js"></script><script src="katex/dist/katex.min.js"></script><script src="katex/dist/contrib/auto-render.min.js"></script>
+</head><body><main id="content"></main><script>
+function setMarkdown(value,streaming=false){
+ const math=[];
+ const saved=value.replace(/\$\$[\s\S]*?\$\$|\\\[[\s\S]*?\\\]|\\\([\s\S]*?\\\)|\$[^$\n]+\$/g,m=>{const i=math.push(m)-1;return 'MATHPLACEHOLDER'+i+'END';});
+ const html=DOMPurify.sanitize(marked.parse(saved,{breaks:true}),{FORBID_TAGS:['img','iframe','style','form','input'],FORBID_ATTR:['style']});
+ const node=document.getElementById('content');node.innerHTML=html;
+ const walker=document.createTreeWalker(node,NodeFilter.SHOW_TEXT);const nodes=[];while(walker.nextNode())nodes.push(walker.currentNode);
+ nodes.forEach(n=>{if(n.parentElement.closest('code,pre')){n.textContent=n.textContent.replace(/MATHPLACEHOLDER(\d+)END/g,(_,i)=>math[Number(i)]||_);return;}const re=/MATHPLACEHOLDER(\d+)END/g;let match,last=0;const fragment=document.createDocumentFragment();while((match=re.exec(n.textContent))){fragment.append(document.createTextNode(n.textContent.slice(last,match.index)));const raw=math[Number(match[1])];if(!raw){fragment.append(document.createTextNode(match[0]));last=re.lastIndex;continue;}const span=document.createElement('span');const doubled=raw.startsWith('$$');const display=raw.startsWith('\\[')||(doubled&&raw.slice(2,-2).includes('\n'));const formula=raw.slice(doubled||raw.startsWith('\\')?2:1,doubled||raw.startsWith('\\')?-2:-1);katex.render(formula,span,{displayMode:display,throwOnError:false,trust:false,strict:'ignore'});fragment.append(span);last=re.lastIndex;}fragment.append(document.createTextNode(n.textContent.slice(last)));n.replaceWith(fragment);});
+ if(streaming){const spinner=document.createElement('span');spinner.className='stream-spinner';spinner.setAttribute('aria-label','正在生成');(node.lastElementChild||node).append(spinner);}
+ if(window.MathHeight)window.MathHeight.height(document.documentElement.scrollHeight);
+}
+new ResizeObserver(()=>{if(window.MathHeight)window.MathHeight.height(document.documentElement.scrollHeight);}).observe(document.getElementById('content'));
+</script></body></html>

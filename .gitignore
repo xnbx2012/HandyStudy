@@ -1,0 +1,34 @@
+# Local Android/Gradle state
+.gradle/
+**/build/
+local.properties
+*.jks
+*.keystore
+.env*
+*.apk
+*.aab
+
+# Personal data, source books, generated banks and logs
+/app/src/main/assets/banks/*
+!/app/src/main/assets/banks/sample/
+/题库/
+/补充题库/
+/27武忠祥严选题做题本【基础篇】/
+/OCR_Output/
+/output/
+/dist/
+/tmp/
+/.playwright-mcp/
+emulator*.log
+/docs/screenshots/
+/docs/*audit*.json
+/docs/*corrections*.json
+/tools/*
+!/tools/build_apk.ps1
+/examples/*
+
+# Local previews
+*-preview.png
+/q*.png
+/a*.png
+huawei-page.html
