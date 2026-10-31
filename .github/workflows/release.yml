@@ -24,7 +24,6 @@ jobs:
           distribution: temurin
           java-version: '21'
           cache: gradle
-      - uses: android-actions/setup-android@v3
       - name: Install Android SDK
         run: yes | sdkmanager 'platforms;android-37' 'build-tools;36.0.0'
       - name: Validate version and signing configuration
