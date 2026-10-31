@@ -2,7 +2,7 @@ param([string]$JavaHome = $env:JAVA_HOME, [switch]$StandardPenOnly)
 
 $ErrorActionPreference = 'Stop'
 $projectRoot = Split-Path $PSScriptRoot -Parent
-$socketDirectory = Join-Path $projectRoot 'tmp/java-sockets'
+$socketDirectory = Join-Path $env:SystemDrive 'Temp'
 New-Item -ItemType Directory -Force -Path $socketDirectory | Out-Null
 
 if (-not $JavaHome) {
@@ -18,11 +18,14 @@ if (-not $JavaHome -or -not (Test-Path (Join-Path $JavaHome 'bin/java.exe'))) {
 
 $previousJavaHome = $env:JAVA_HOME
 $previousJavaOptions = $env:JAVA_TOOL_OPTIONS
+$previousTemp = $env:TEMP
+$previousTmp = $env:TMP
 try {
     $env:JAVA_HOME = $JavaHome
-    # Store-app filesystem virtualization can break AF_UNIX sockets in %TEMP%.
-    # JAVA_TOOL_OPTIONS also reaches Gradle's daemon and worker JVMs.
-    $env:JAVA_TOOL_OPTIONS = "$previousJavaOptions `"-Djdk.net.unixdomain.tmpdir=$socketDirectory`"".Trim()
+    # A short absolute temp path avoids Windows Java local-socket failures.
+    $env:TEMP = $socketDirectory
+    $env:TMP = $socketDirectory
+    $env:JAVA_TOOL_OPTIONS = "$previousJavaOptions -Djava.io.tmpdir=$socketDirectory".Trim()
     Push-Location $projectRoot
     try {
         # Recreate the APK: incremental ZIP updates can retain deleted bank data.
@@ -36,4 +39,6 @@ try {
 } finally {
     $env:JAVA_HOME = $previousJavaHome
     $env:JAVA_TOOL_OPTIONS = $previousJavaOptions
+    $env:TEMP = $previousTemp
+    $env:TMP = $previousTmp
 }
