@@ -36,7 +36,7 @@
 
 ## 🛠️ 从源码构建
 
-需要 JDK 17+、Android SDK 37 与可访问 Google Maven、Maven Central、vivo Maven 的网络。
+需要 JDK 17+、Android SDK 36 与可访问 Google Maven、Maven Central、vivo Maven 的网络。
 
 ```bash
 ./gradlew :app:assembleDebug

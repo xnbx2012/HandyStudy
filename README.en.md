@@ -36,7 +36,7 @@ Configure your model under **Settings → AI companion**. The public app include
 
 ## 🛠️ Build
 
-Install JDK 17+, Android SDK 37 and dependencies from Google Maven, Maven Central and vivo Maven.
+Install JDK 17+, Android SDK 36 and dependencies from Google Maven, Maven Central and vivo Maven.
 
 ```bash
 ./gradlew :app:assembleDebug
