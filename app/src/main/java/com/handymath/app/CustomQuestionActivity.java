@@ -32,6 +32,7 @@ public final class CustomQuestionActivity extends Activity {
   private final ExecutorService worker=Executors.newSingleThreadExecutor();
   private Bitmap photo;
   private String photoName="",captureName="",warnings="";
+  private boolean autoFullPhoto;
   private JSONArray regions=new JSONArray();
   private boolean saving, recognizing, importing, completed, reviewConfirmed;
   private File draftFile(){return new File(getFilesDir(),"custom-question-draft.json");}
@@ -64,8 +65,8 @@ public final class CustomQuestionActivity extends Activity {
     pair(source,AppUi.button(this,"拍照识题",true,()->choose(true)),AppUi.button(this,"从相册选择",false,()->choose(false)));
     photoPreview=new ImageView(this);photoPreview.setAdjustViewBounds(true);photoPreview.setMaxHeight(dp(250));photoPreview.setScaleType(ImageView.ScaleType.FIT_CENTER);photoPreview.setContentDescription("教材原照片预览，点击可手动框选");photoPreview.setVisibility(View.GONE);source.addView(photoPreview,new LinearLayout.LayoutParams(-1,-2));photoPreview.setOnClickListener(v->showCrop());
     progress=new ProgressBar(this);progress.setIndeterminateTintList(android.content.res.ColorStateList.valueOf(AppUi.TEAL));progress.setVisibility(View.GONE);source.addView(progress,new LinearLayout.LayoutParams(dp(26),dp(26)));
-    photoStatus=AppUi.text(this,"识别使用当前已配置的多模态模型，结果可校对、编辑和重新分区。",13,AppUi.MUTED);photoStatus.setPadding(0,dp(12),0,dp(6));source.addView(photoStatus);
-    retry=AppUi.button(this,"重新识别",false,()->recognizePhoto());retry.setVisibility(View.GONE);
+    photoStatus=AppUi.text(this,"照片默认直接作为题目；需要拆分题目、答案和已有作答时，可手动框选或点击识别。",13,AppUi.MUTED);photoStatus.setPadding(0,dp(12),0,dp(6));source.addView(photoStatus);
+    retry=AppUi.button(this,"识别照片",false,()->recognizePhoto());retry.setVisibility(View.GONE);
     Button crop=AppUi.button(this,"手动框选区域",false,()->showCrop());pair(source,retry,crop);
     Button configure=AppUi.button(this,"多模态模型设置",false,()->startActivity(new Intent(this,ProvidersActivity.class)));source.addView(configure);inputs.add(configure);
     LinearLayout problem=card("01  题目","检查题干、条件、选项与图形，不要包含参考答案或已有作答。");
@@ -103,7 +104,7 @@ public final class CustomQuestionActivity extends Activity {
     try{
       JSONObject draft=state!=null&&state.containsKey("draft")?new JSONObject(state.getString("draft")):draftFile().isFile()?new JSONObject(new String(new AtomicFile(draftFile()).readFully(),StandardCharsets.UTF_8)):null;
       if(draft!=null){title.setText(draft.optString("title"));body.setText(draft.optString("body"));reference.setText(draft.optString("reference"));student.setText(draft.optString("student"));if(draft.has("paper"))paper.restore(draft.getJSONObject("paper"));
-        captureName=draft.optString("capture");photoName=draft.optString("photo");warnings=draft.optString("warnings");regions=draft.optJSONArray("regions");if(regions==null)regions=new JSONArray();reviewConfirmed=draft.optBoolean("reviewConfirmed");
+        captureName=draft.optString("capture");photoName=draft.optString("photo");warnings=draft.optString("warnings");regions=draft.optJSONArray("regions");if(regions==null)regions=new JSONArray();reviewConfirmed=draft.optBoolean("reviewConfirmed");autoFullPhoto=draft.optBoolean("autoFullPhoto");
         if(!photoName.isEmpty()){photo=PhotoQuestion.decode(PhotoQuestion.file(this,photoName));displayPhoto();photoStatus.setText(warnings.isEmpty()?"已恢复照片草稿，请核对后保存。":warnings);}
       }
     }catch(Exception e){photoName="";toast("部分照片草稿未能恢复，请重新选择照片");}
@@ -114,7 +115,7 @@ public final class CustomQuestionActivity extends Activity {
   private void choose(boolean camera){
     if(busy())return;
     if(photo!=null||!body.getText().toString().trim().isEmpty()||!reference.getText().toString().trim().isEmpty()||!student.getText().toString().trim().isEmpty()){
-      Dialog d=new Dialog(this);LinearLayout box=AppUi.card(this);box.addView(AppUi.heading(this,"换一张照片？"));TextView note=AppUi.text(this,"新照片会重新识别并替换当前识别文字与分区，手写补充会保留。",15,AppUi.MUTED);note.setPadding(0,dp(12),0,dp(20));box.addView(note);pair(box,AppUi.button(this,"保留当前",false,d::dismiss),AppUi.button(this,"继续选择",true,()->{d.dismiss();launch(camera);}));showDialog(d,box,520);return;
+      Dialog d=new Dialog(this);LinearLayout box=AppUi.card(this);box.addView(AppUi.heading(this,"换一张照片？"));TextView note=AppUi.text(this,"新照片会替换当前照片和分区，手写补充会保留。",15,AppUi.MUTED);note.setPadding(0,dp(12),0,dp(20));box.addView(note);pair(box,AppUi.button(this,"保留当前",false,d::dismiss),AppUi.button(this,"继续选择",true,()->{d.dismiss();launch(camera);}));showDialog(d,box,520);return;
     }launch(camera);
   }
   private void launch(boolean camera){
@@ -143,9 +144,14 @@ public final class CustomQuestionActivity extends Activity {
         runOnUiThread(()->{
           if(isDestroyed()){bitmap.recycle();return;}
           clearThumbnails();photoPreview.setImageDrawable(null);if(photo!=null)photo.recycle();
-          String old=photoName;photoName=imported.getName();photo=bitmap;regions=new JSONArray();reviewConfirmed=false;warnings="";importing=false;displayPhoto();setBusy();
+          String old=photoName;photoName=imported.getName();photo=bitmap;regions=new JSONArray();reviewConfirmed=false;warnings="";
+          autoFullPhoto=!AppSettings.enabled(this,"autoRecognizeCustomPhoto",false);
+          if(autoFullPhoto)try{regions.put(new JSONObject().put("role",0).put("left",0).put("top",0).put("right",1000).put("bottom",1000));}
+          catch(Exception e){failure(e);}
+          importing=false;displayPhoto();setBusy();
           if(!old.isEmpty())try{PhotoQuestion.file(this,old).delete();}catch(IOException ignored){}
-          persistDraft();recognizePhoto();
+          photoStatus.setText(autoFullPhoto?"照片已作为题目。若包含答案或手写作答，请手动框选区域或点击识别照片后核对。":"照片已导入，正在识别…");
+          persistDraft();if(!autoFullPhoto)recognizePhoto();
         });
       }catch(Exception|OutOfMemoryError e){runOnUiThread(()->{importing=false;failure(e);});}
       finally{if(camera)try{CaptureProvider.file(this,uri).delete();captureName="";revokeUriPermission(uri,Intent.FLAG_GRANT_READ_URI_PERMISSION|Intent.FLAG_GRANT_WRITE_URI_PERMISSION);}catch(Exception ignored){}}
@@ -167,7 +173,7 @@ public final class CustomQuestionActivity extends Activity {
   }
   void applyRecognition(JSONObject result)throws Exception{
     PhotoQuestion.validate(result);title.setText(result.getString("title"));body.setText(result.getString("questionMarkdown"));reference.setText(result.getString("referenceMarkdown"));student.setText(result.getString("studentMarkdown"));
-    regions=PhotoQuestion.regions(result);warnings=result.getString("warnings");reviewConfirmed=false;
+    regions=PhotoQuestion.regions(result);warnings=result.getString("warnings");reviewConfirmed=false;autoFullPhoto=false;retry.setText("重新识别");
     photoStatus.setText(warnings.isEmpty()?"识别完成。请分别核对下面的题目、参考答案和我的作答。":"需要校对："+warnings);renderCrops();updateReview();
   }
   private void displayPhoto(){photoPreview.setImageBitmap(photo);photoPreview.setVisibility(View.VISIBLE);retry.setVisibility(View.VISIBLE);reviewButton.setVisibility(View.VISIBLE);renderCrops();updateReview();}
@@ -190,11 +196,12 @@ public final class CustomQuestionActivity extends Activity {
     if(busy())return;if(photo==null){toast("请先拍照或选择照片");return;}
     Dialog d=new Dialog(this);LinearLayout box=AppUi.card(this);box.addView(AppUi.heading(this,"拖动框选，再选择区域类别"));PhotoCropView view=new PhotoCropView(this,photo);box.addView(view,new LinearLayout.LayoutParams(-1,0,1));
     LinearLayout buttons=new LinearLayout(this);String[] names={"作为题目","作为参考答案","作为我的作答"};
-    for(int i=0;i<3;i++){final int role=i;Button button=AppUi.button(this,names[i],i==0,()->{try{if(regions.length()>=32)throw new IOException("区域已达到上限");regions.put(view.region(role));reviewConfirmed=false;renderCrops();updateReview();d.dismiss();}catch(Exception e){toast(e.getMessage());}});LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(0,-2,1);lp.setMargins(dp(2),dp(8),dp(2),0);buttons.addView(button,lp);}box.addView(buttons);box.addView(AppUi.button(this,"取消",false,d::dismiss));
+    for(int i=0;i<3;i++){final int role=i;Button button=AppUi.button(this,names[i],i==0,()->{try{if(regions.length()>=32)throw new IOException("区域已达到上限");if(autoFullPhoto){regions=new JSONArray();autoFullPhoto=false;}
+        regions.put(view.region(role));reviewConfirmed=false;renderCrops();updateReview();d.dismiss();}catch(Exception e){toast(e.getMessage());}});LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(0,-2,1);lp.setMargins(dp(2),dp(8),dp(2),0);buttons.addView(button,lp);}box.addView(buttons);box.addView(AppUi.button(this,"取消",false,d::dismiss));
     d.setContentView(box);d.getWindow().setBackgroundDrawableResource(android.R.color.transparent);d.show();d.getWindow().setLayout(getResources().getDisplayMetrics().widthPixels-dp(32),getResources().getDisplayMetrics().heightPixels-dp(80));
   }
   private void showDialog(Dialog dialog,LinearLayout box,int width){dialog.setContentView(box);dialog.getWindow().setBackgroundDrawableResource(android.R.color.transparent);dialog.show();dialog.getWindow().setLayout(Math.min(dp(width),getResources().getDisplayMetrics().widthPixels-dp(32)),-2);}
-  private JSONObject draft()throws Exception{paper.commitText();return new JSONObject().put("title",title.getText().toString()).put("body",body.getText().toString()).put("reference",reference.getText().toString()).put("student",student.getText().toString()).put("paper",paper.serialize()).put("photo",photoName).put("capture",captureName).put("regions",regions).put("warnings",warnings).put("reviewConfirmed",reviewConfirmed);}
+  private JSONObject draft()throws Exception{paper.commitText();return new JSONObject().put("title",title.getText().toString()).put("body",body.getText().toString()).put("reference",reference.getText().toString()).put("student",student.getText().toString()).put("paper",paper.serialize()).put("photo",photoName).put("capture",captureName).put("regions",regions).put("warnings",warnings).put("reviewConfirmed",reviewConfirmed).put("autoFullPhoto",autoFullPhoto);}
   private void persistDraft(){if(completed)return;try{writeAtomic(draftFile(),draft().toString().getBytes(StandardCharsets.UTF_8));}catch(Exception e){toast("草稿保存失败，请稍后重试");}}
   static void writeAtomic(File target,byte[] data)throws Exception{AtomicFile file=new AtomicFile(target);FileOutputStream out=file.startWrite();try{out.write(data);file.finishWrite(out);}catch(Exception e){file.failWrite(out);throw e;}}
   @Override protected void onSaveInstanceState(Bundle state){try{state.putString("draft",draft().toString());}catch(Exception ignored){}super.onSaveInstanceState(state);}

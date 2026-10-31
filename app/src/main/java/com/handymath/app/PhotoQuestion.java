@@ -71,8 +71,9 @@ final class PhotoQuestion {
     }
     schema.put("properties",properties).put("required",required);
     String prompt="你是教材照片转录助手，只忠实识别图片，不解题、不补造答案。将图片按三类分开：questionMarkdown是题目印刷正文、条件与选项；referenceMarkdown是图片实际印刷或明确标为标准答案/解析的内容，未出现必须为空；studentMarkdown仅是用户手写的作答过程或答案，保留错误和不会的说明，绝不替换成正确答案。手写的题号或题面补充不是用户的答案。无法确定是参考解析还是学生笔迹时不要擅自归类，在warnings说明并要求校对。看不清的文字标注[看不清]，不要猜。多道独立题目出现在照片中时只识别主要/居中题目并在warnings说明范围。title简短。公式用LaTeX。三类Regions各自是对应内容（包括图形）的紧贴边界框，坐标以整张图左上为(0,0)、右下为(1000,1000)，整数。必须把题目与参考答案和学生作答分离，不能把整张混合照片作为题目框；区域可多个，禁止不同类别重叠。不存在的类别返回空字符串与空数组。不要将手写作答放进题目或参考答案。若手写覆盖印刷题目，使用文字转录分离，题目区域只保留不含作答或参考答案的图形；无法分离的区域不要框入题目，并在warnings说明。";
-    JSONObject result=TutorClient.structured(config,prompt,new JSONArray().put(TutorClient.text("请转录并分区这张照片。" )).put(photoPart(image)),schema);
-    validate(result);return result;
+    return TutorClient.structured(config,prompt,
+        new JSONArray().put(TutorClient.text("请转录并分区这张照片。" )).put(photoPart(image)),
+        schema, PhotoQuestion::validate);
   }
   static void validate(JSONObject result)throws Exception {
     for(String name:new String[]{"title","questionMarkdown","referenceMarkdown","studentMarkdown","warnings"}){

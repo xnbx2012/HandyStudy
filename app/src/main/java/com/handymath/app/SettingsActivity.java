@@ -79,6 +79,9 @@ public final class SettingsActivity extends PageActivity {
     action("查看已保存的对话日志", () -> startActivity(new Intent(this, LogsActivity.class)));
     toggle("stream", "开启流式输出", false);
     section("智能伴学", "配置支持图片输入的模型服务");
+    toggle("autoRecognizeCustomPhoto", "添加自定义题目时自动识别照片", false);
+    label("关闭时照片先作为题目原图；可手动框选，或点击「识别照片」再提取题目、参考答案和已有作答。");
+    retrySetting();
     provider();
     about();
     section("题库与导入", "支持 Markdown、LaTeX 公式与图片题目");
@@ -185,6 +188,24 @@ public final class SettingsActivity extends PageActivity {
         });
       }
     });
+  }
+
+  private void retrySetting() {
+    TextView row = label("");
+    Runnable refresh = () -> row.setText("LLM 格式异常自动重试："
+        + AppSettings.retries(this) + " 次  ›");
+    refresh.run();
+    row.setMinHeight(dp(52));
+    row.setGravity(Gravity.CENTER_VERTICAL);
+    row.setOnClickListener(v -> new AlertDialog.Builder(this)
+        .setTitle("格式异常自动重试次数")
+        .setSingleChoiceItems(new String[] {"0 次", "1 次", "2 次", "3 次", "4 次", "5 次"},
+            AppSettings.retries(this), (dialog, which) -> {
+              AppSettings.prefs(this).edit().putInt("llmFormatRetries", which).apply();
+              refresh.run();
+              dialog.dismiss();
+            }).setNegativeButton("取消", null).show());
+    divider();
   }
 
   private void penAction(String key, String name) {

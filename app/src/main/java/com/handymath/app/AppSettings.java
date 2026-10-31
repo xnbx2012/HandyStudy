@@ -11,6 +11,7 @@ final class AppSettings {
         int value = prefs(c).getInt(gesture + "Action", SWITCH_TOOL);
         return value >= 0 && value < PEN_ACTIONS.length ? value : NONE;
     }
+    static int retries(Context c) { return Math.max(0, Math.min(5, prefs(c).getInt("llmFormatRetries", 3))); }
     static SharedPreferences prefs(Context c) {
         return c.getSharedPreferences("preferences", 0);
     }

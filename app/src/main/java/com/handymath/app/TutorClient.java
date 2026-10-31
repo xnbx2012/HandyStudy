@@ -148,8 +148,17 @@ final class TutorClient {
       Map<String,JSONObject> recognized=new HashMap<>();
       if(!handwritten.isEmpty()){
         STAGE.set("合并识别本组作答");
-        JSONObject raw=json(request(config,messages("这是多题独立识别，禁止解题或使用参考答案补全学生内容。按题目ID逐题识别图片中的实际手写、划线、箭头及键盘文字；描述批注具体指向题面哪个词。不能把印刷题面当学生答案，不能把一道题的答案分给另一道题。仅返回JSON answers数组，每项 id、transcription、choice（A/B/C/D组合，未写空字符串）、readable（布尔）、confidence（0到1）。必须包含所有给出的手写题目ID，不能遗漏、增加或重复。",student),true,Math.max(4096,items.size()*500)));
-        recognized=batchObjects(raw.getJSONArray("answers"),handwritten);
+        String recognitionPrompt="这是多题独立识别，禁止解题或使用参考答案补全学生内容。按题目ID逐题识别图片中的实际手写、划线、箭头及键盘文字；描述批注具体指向题面哪个词。不能把印刷题面当学生答案，不能把一道题的答案分给另一道题。仅返回JSON answers数组，每项 id、transcription、choice（A/B/C/D组合，未写空字符串）、readable（布尔）、confidence（0到1）。必须包含所有给出的手写题目ID，不能遗漏、增加或重复。";
+        recognized=requestValidated(config,recognitionPrompt,student,Math.max(4096,items.size()*500),raw -> {
+          Map<String,JSONObject> parsed=batchObjects(json(raw).getJSONArray("answers"),handwritten);
+          for(JSONObject row:parsed.values())
+            if (!(row.opt("transcription") instanceof String)
+                || !(row.opt("readable") instanceof Boolean)
+                || !(row.opt("confidence") instanceof Number)
+                || !(row.opt("choice") instanceof String))
+              throw new IOException("批量识别缺少作答、选项、可读性或置信度字段");
+          return parsed;
+        });
         for(BatchPractice.Item item:handwritten)if(!readable(recognized.get(item.question.id)))throw new IOException("「"+item.question.title+"」的笔迹未识别清楚，本组未批改。请回到该题补充或放大书写后重试");
       }
       JSONArray questions=new JSONArray();
@@ -169,7 +178,11 @@ final class TutorClient {
       }
       STAGE.set("统一批改本组 "+items.size()+" 题");
       String instruction=prompt(Mode.GRADE,0,new JSONArray())+" 本次是多题统一批改。将单题JSON改为根对象results数组，每项必须包含id、studentWork、choice、score、correct、feedback、weaknesses。逐题独立核验，所有题目ID必须恰好出现一次；只写选项仍是有效选择题作答，空白按0分但不能猜测学生薄弱点。若学生明确选择了最终选项，按该选项核对，同时检查确实可见的推导。只给每题必要的针对性点评；参考解析由应用另附，不要全文复述。";
-      Map<String,JSONObject> rows=batchObjects(json(request(config,messages(instruction,content),true,Math.max(4096,items.size()*1600))).getJSONArray("results"),items);
+      Map<String,JSONObject> rows=requestValidated(config,instruction,content,Math.max(4096,items.size()*1600),raw -> {
+        Map<String,JSONObject> parsed=batchObjects(json(raw).getJSONArray("results"),items);
+        for(JSONObject row:parsed.values())Reply.parse(row.toString(),Mode.GRADE);
+        return parsed;
+      });
       BatchReply batch=new BatchReply();
       for(BatchPractice.Item item:items){
         BankRepository.Question q=item.question;JSONObject raw=rows.get(q.id);Reply reply=Reply.parse(raw.toString(),Mode.GRADE);
@@ -492,16 +505,26 @@ final class TutorClient {
         + "不可把印刷题面或参考解析当作学生作答；不清楚时readable=false，不能猜测。"
         + "若参考解析有误，以独立推导为准。选择题只写正确选项即可满分；明确选项与标准选项不符不能判对。"
         + "得分、点评、薄弱点与转写必须相互一致。";
-    VISIBLE.set(true);
-    String raw;
-    try { raw = request(config, messages(instruction, content), true, 4096); }
-    finally { VISIBLE.remove(); }
-    JSONObject result = json(raw);
-    if (!readable(result)) throw new IOException("笔迹识别不够清楚，未评分。请放大书写或检查笔迹后重试");
-    Reply reply = Reply.parse(raw, Mode.GRADE);
+    JSONObject result = requestValidated(config, instruction, content, 4096, raw -> {
+      JSONObject value = json(raw);
+      if (!(value.opt("transcription") instanceof String)
+          || !(value.opt("readable") instanceof Boolean)
+          || !(value.opt("confidence") instanceof Number))
+        throw new IOException("缺少作答转写、可读性或置信度字段");
+      double confidence = value.getDouble("confidence");
+      if (!Double.isFinite(confidence) || confidence < 0 || confidence > 1
+          || value.optBoolean("readable") && value.optString("transcription").trim().isEmpty())
+        throw new IOException("作答识别字段无效：置信度须在0到1之间，清晰作答须包含转写");
+      if (!value.optBoolean("readable") || confidence < .75)
+        throw new UnreadableWork("笔迹识别不够清楚，未评分。请放大书写或检查笔迹后重试");
+      Reply parsed = Reply.parse(raw, Mode.GRADE);
+      JSONObject tags = value.getJSONObject("tags");
+      validateTags(tags);
+      return value;
+    });
+    Reply reply = Reply.parse(result.toString(), Mode.GRADE);
     reply.studentWork = result.getString("transcription");
     reply.tags = result.getJSONObject("tags");
-    validateTags(reply.tags);
     String choice = recognizedChoice(result);
     String expected = normalizeChoice(q.expectedChoice);
     if (!expected.isEmpty() && !choice.isEmpty() && !expected.equals(choice)) {
@@ -540,42 +563,97 @@ final class TutorClient {
         && !r.optString("transcription").trim().isEmpty();
   }
 
-  static Reply formattedReply(
-      ProviderSettings config, String instruction, JSONArray content, Mode mode) throws Exception {
-    if (STREAM.get() != null) STAGE.set(mode == Mode.GRADE ? "生成 / 复核解析" : mode == Mode.HINT ? "生成思路提示" : "检查已有步骤");
-    VISIBLE.set(true);
-    String raw;
-    try {
-      raw = request(config, messages(instruction, content), true);
-    } finally {
-      VISIBLE.remove();
+  static Reply formattedReply(ProviderSettings config, String instruction,
+      JSONArray content, Mode mode) throws Exception {
+    if (STREAM.get() != null) STAGE.set(mode == Mode.GRADE ? "生成 / 复核解析"
+        : mode == Mode.HINT ? "生成思路提示" : "检查已有步骤");
+    return requestValidated(config, instruction, content, 0, raw -> Reply.parse(raw, mode));
+  }
+
+  private static final class UnreadableWork extends IOException {
+    UnreadableWork(String message) { super(message); }
+  }
+
+  interface ResultValidator<T> { T validate(String raw) throws Exception; }
+
+  private static <T> T requestValidated(ProviderSettings config, String instruction,
+      JSONArray content, int minimumOutput, ResultValidator<T> validator) throws Exception {
+    int retries = config.context == null ? 3 : AppSettings.retries(config.context);
+    String previous = null, diagnostic = null;
+    for (int attempt = 0; ; attempt++) {
+      JSONArray context = messages(instruction, content);
+      if (previous != null) {
+        context.put(new JSONObject().put("role", "assistant").put("content", previous));
+        context.put(new JSONObject().put("role", "user").put("content",
+            "上一轮输出未通过应用校验：" + diagnostic
+                + "。请结合最初的完整题目、图片、学生作答及上一轮回复重新核对。"
+                + "只返回完整、合法的 JSON 对象，补齐所有必填字段；公式使用 $$...$$，"
+                + "JSON 字符串中的反斜杠正确转义。不要只返回修改说明。"));
+        if (STREAM.get() != null) STAGE.set("修正模型返回格式（" + attempt + "/" + retries + "）");
+      }
+      // Do not expose a partial answer before it has passed validation.
+      VISIBLE.set(false);
+      String raw;
+      try { raw = request(config, context, true, minimumOutput); }
+      finally { VISIBLE.remove(); }
+      try { return validator.validate(raw); }
+      catch (Exception invalid) {
+        if (invalid instanceof UnreadableWork) throw invalid;
+        if (attempt >= retries) throw new IOException("模型连续返回不合规结果（已自动重试 "
+            + retries + " 次）：" + invalid.getMessage(), invalid);
+        previous = raw;
+        diagnostic = limit(invalid.getMessage() == null ? invalid.getClass().getSimpleName()
+            : invalid.getMessage(), 600);
+      }
     }
-    try {
-      return Reply.parse(raw, mode);
-    } catch (IOException e) {
-      if (!e.getMessage().contains("模型公式")) throw e;
-      JSONObject old = json(raw);
-      if (STREAM.get() != null) STAGE.set("核对公式格式");
-      VISIBLE.set(true);
-      String repaired =
-          request(
-              config,
-              messages(
-                  "你是JSON公式格式修复器。只修复 feedback 和 hint 中的数学公式分隔符，所有公式使用"
-                      + " $$...$$，短公式在同一行，长公式分隔符内换行。修复不配对的美元符号。保留原有评分、布尔值、weaknesses和数学含义，不能重新评分、改正学生错误或增加解析。返回完整JSON，反斜线转义。",
-                  new JSONArray().put(text(raw))),
-              true);
-      VISIBLE.remove();
-      JSONObject next = json(repaired);
-      for (String key : new String[] {"score", "correct", "partialValid", "weaknesses"})
-        if (old.has(key)) {
-          Object a = old.get(key), b = next.get(key);
-          if (a instanceof Number && b instanceof Number) {
-            if (((Number) a).doubleValue() != ((Number) b).doubleValue())
-              throw new IOException("公式修复改变评分，已拒绝结果");
-          } else if (!a.toString().equals(b.toString())) throw new IOException("公式修复改变评判，已拒绝结果");
+  }
+
+  private static void validateSchema(JSONObject value, JSONObject schema) throws Exception {
+    JSONObject properties = schema.optJSONObject("properties");
+    JSONArray required = schema.optJSONArray("required");
+    if (required != null) for (int i = 0; i < required.length(); i++)
+      if (!value.has(required.getString(i))) throw new IOException("缺少字段 " + required.getString(i));
+    if (properties == null) return;
+    for (java.util.Iterator<String> it = properties.keys(); it.hasNext();) {
+      String key = it.next();
+      if (!value.has(key)) continue;
+      JSONObject rule = properties.getJSONObject(key);
+      Object field = value.get(key);
+      String type = rule.optString("type");
+      if (type.equals("string") && !(field instanceof String)
+          || type.equals("boolean") && !(field instanceof Boolean)
+          || type.equals("array") && !(field instanceof JSONArray)
+          || type.equals("object") && !(field instanceof JSONObject)
+          || type.equals("integer") && (!(field instanceof Number)
+              || ((Number) field).doubleValue() != ((Number) field).intValue()))
+        throw new IOException("字段 " + key + " 类型错误，应为 " + type);
+      if (field instanceof JSONObject && type.equals("object")) validateSchema((JSONObject) field, rule);
+      if (field instanceof JSONArray && type.equals("array")) {
+        JSONArray values = (JSONArray) field;
+        if (rule.has("maxItems") && values.length() > rule.getInt("maxItems"))
+          throw new IOException("字段 " + key + " 数量过多");
+        JSONObject itemRule = rule.optJSONObject("items");
+        if (itemRule != null) for (int i = 0; i < values.length(); i++) {
+          Object item = values.get(i);
+          if (itemRule.optString("type").equals("object")) {
+            if (!(item instanceof JSONObject)) throw new IOException("字段 " + key + " 数组元素应为对象");
+            validateSchema((JSONObject) item, itemRule);
+          } else if (itemRule.optString("type").equals("string") && !(item instanceof String))
+            throw new IOException("字段 " + key + " 数组元素应为字符串");
         }
-      return Reply.parse(repaired, mode);
+      }
+      if (field instanceof Number) {
+        double n = ((Number) field).doubleValue();
+        if (!Double.isFinite(n) || rule.has("minimum") && n < rule.getDouble("minimum")
+            || rule.has("maximum") && n > rule.getDouble("maximum"))
+          throw new IOException("字段 " + key + " 数值超出范围");
+      }
+      JSONArray choices = rule.optJSONArray("enum");
+      if (choices != null) {
+        boolean allowed = false;
+        for (int i = 0; i < choices.length(); i++) if (choices.get(i).equals(field)) allowed = true;
+        if (!allowed) throw new IOException("字段 " + key + " 不在允许值内");
+      }
     }
   }
 
@@ -715,9 +793,15 @@ final class TutorClient {
     }
   }
 
-  static JSONObject structured(
-      ProviderSettings config, String prompt, JSONArray content, JSONObject schema)
-      throws Exception {
+  interface JsonValidator { void validate(JSONObject value) throws Exception; }
+
+  static JSONObject structured(ProviderSettings config, String prompt, JSONArray content,
+      JSONObject schema) throws Exception {
+    return structured(config, prompt, content, schema, null);
+  }
+
+  static JSONObject structured(ProviderSettings config, String prompt, JSONArray content,
+      JSONObject schema, JsonValidator validator) throws Exception {
     boolean deepseek = "api.deepseek.com".equalsIgnoreCase(new URL(config.baseUrl).getHost());
     JSONObject example = (JSONObject)schemaExample(schema);
     String instruction =
@@ -729,12 +813,22 @@ final class TutorClient {
             + schema;
     if (!deepseek) SCHEMA.set(schema);
     try {
-      return json(request(config, messages(instruction, content), true));
+      return requestValidated(config, instruction, content, 0, raw -> {
+        JSONObject value = json(raw);
+        validateSchema(value, schema);
+        if (validator != null) validator.validate(value);
+        return value;
+      });
     } catch (IOException e) {
       if (!deepseek
           && (e.getMessage().contains("HTTP 400") || e.getMessage().contains("HTTP 422"))) {
         SCHEMA.remove();
-        return json(request(config, messages(instruction, content), true));
+        return requestValidated(config, instruction, content, 0, raw -> {
+          JSONObject value = json(raw);
+          validateSchema(value, schema);
+          if (validator != null) validator.validate(value);
+          return value;
+        });
       }
       throw e;
     } finally {
@@ -800,7 +894,8 @@ final class TutorClient {
                   + " examPoints、题型 questionType 和难度"
                   + " difficulty（1基础到5困难）。不要用学生分数推断题目难度。",
               content,
-              tagSchema());
+              tagSchema(),
+              TutorClient::validateTags);
       validateTags(tags);
       if (db != null) db.tags(bank.id, q.id, tags);
       return tags;

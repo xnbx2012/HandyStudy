@@ -89,24 +89,37 @@ final class CustomInputChecks {
     for(String path:question.questionImages){Bitmap bitmap=bank.image(path);check(bitmap!=null,"custom question image opens via ordinary bank API");bitmap.recycle();}
     ProviderSettings cfg=new ProviderSettings();cfg.context=c;cfg.key="fixture";cfg.visionVerified=true;
     LlmTransport.ConnectionFactory previous=LlmTransport.connections;
+    int oldRetries=AppSettings.retries(c);
+    AppSettings.prefs(c).edit().putInt("llmFormatRetries",3).commit();
     java.util.concurrent.atomic.AtomicInteger requests=new java.util.concurrent.atomic.AtomicInteger();
+    List<Fake> gradeCalls=new ArrayList<>();
     String recognition=new JSONObject().put("transcription","改为 x = 3，我在这一步不会了").put("finalAnswer","3").put("choice","").put("readable",true).put("confidence",.95).toString();
     String tags=new JSONObject().put("knowledgePoints",new JSONArray().put("一元一次方程")).put("examPoints",new JSONArray().put("等式性质")).put("questionType","解答题").put("difficulty",1).toString();
     String grade=new JSONObject(recognition).put("score",6).put("correct",false)
         .put("feedback","结果正确，请补充等式变形步骤。").put("weaknesses",new JSONArray())
         .put("tags",new JSONObject(tags)).toString();
     try {
-      LlmTransport.connections=url->new Fake(url,new JSONObject().put("choices",new JSONArray().put(new JSONObject().put("message",new JSONObject().put("content",grade)).put("finish_reason","stop"))).toString());
+      LlmTransport.connections=url->{int attempt=requests.getAndIncrement();
+          String content=attempt==0?"{":attempt==1?"{\"score\":\"bad\"}"
+              :attempt==2?new JSONObject(grade).put("feedback","x+1").toString():grade;
+          Fake connection=new Fake(url,new JSONObject().put("choices",new JSONArray().put(
+              new JSONObject().put("message",new JSONObject().put("content",content))
+                  .put("finish_reason","stop"))).toString());
+          gradeCalls.add(connection);return connection;};
       TutorClient.Reply reply=TutorClient.ask(cfg,bank,question,sheets,TutorClient.Mode.GRADE,0,new JSONArray());
       check(reply.score==6&&reply.studentWork.contains("不会"),"custom mixed answer reaches unified grading");
       check(reply.tags.getJSONArray("knowledgePoints").length()==1,"unified grading includes classification");
+      check(gradeCalls.size()==4,"invalid JSON, score and formula each consume one automatic retry");
+      String retryPayload=gradeCalls.get(3).sent.toString("UTF-8");
+      check(retryPayload.contains("上一轮输出未通过应用校验")&&retryPayload.contains("image_url")
+          &&retryPayload.contains("x+1"),"retry retains original image, prior response and validation error");
       LlmTransport.connections=url->new Fake(url,new JSONObject().put("choices",new JSONArray().put(new JSONObject().put("message",new JSONObject().put("content",new JSONObject().put("hint","先用等式性质移项。").put("feedback","").toString())).put("finish_reason","stop"))).toString());
       check(!TutorClient.ask(cfg,bank,question,Collections.emptyList(),TutorClient.Mode.HINT,1,new JSONArray()).hint.isEmpty(),"custom question supports existing hint flow");
       requests.set(0);
       String partial=new JSONObject().put("partialValid",true).put("feedback","").put("hint","把等式两边同时减去1。").toString();
       LlmTransport.connections=url->new Fake(url,new JSONObject().put("choices",new JSONArray().put(new JSONObject().put("message",new JSONObject().put("content",requests.getAndIncrement()==0?recognition:partial)).put("finish_reason","stop"))).toString());
       check(TutorClient.ask(cfg,bank,question,sheets,TutorClient.Mode.PARTIAL,0,new JSONArray()).partialValid,"custom mixed answer supports partial-work questions");
-    } finally {LlmTransport.connections=previous;for(InkView.Sheet sheet:sheets)sheet.bitmap.recycle();}
+    } finally {LlmTransport.connections=previous;AppSettings.prefs(c).edit().putInt("llmFormatRetries",oldRetries).commit();for(InkView.Sheet sheet:sheets)sheet.bitmap.recycle();}
     MainActivity main=(MainActivity)test.startActivitySync(new Intent(c,MainActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK).putExtra("bankLocation","custom-questions").putExtra("questionId",id));
     test.waitForIdleSync();
     java.lang.reflect.Field inkField=MainActivity.class.getDeclaredField("ink");inkField.setAccessible(true);

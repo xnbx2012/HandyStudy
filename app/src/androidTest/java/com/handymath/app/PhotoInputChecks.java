@@ -31,6 +31,8 @@ final class PhotoInputChecks {
   }
   static void run(Instrumentation test)throws Exception{
     Context c=test.getTargetContext();new android.util.AtomicFile(new File(c.getFilesDir(),"custom-question-draft.json")).delete();String active=ProviderSettings.load(c).id;
+    boolean oldAuto=AppSettings.enabled(c,"autoRecognizeCustomPhoto",false);
+    AppSettings.prefs(c).edit().putBoolean("autoRecognizeCustomPhoto",false).commit();
     ProviderSettings cfg=new ProviderSettings();cfg.context=c;cfg.id="photo-test-"+System.nanoTime();cfg.name="照片测试模型";cfg.key="fixture";cfg.visionVerified=true;cfg.save(c);ProviderSettings.activate(c,cfg.id);
     File source=new File(CaptureProvider.directory(c),"capture-"+UUID.randomUUID()+".jpg");
     Bitmap fixture=Bitmap.createBitmap(900,1200,Bitmap.Config.ARGB_8888);Canvas canvas=new Canvas(fixture);canvas.drawColor(Color.WHITE);Paint p=new Paint(3);
@@ -51,7 +53,15 @@ final class PhotoInputChecks {
     try{
       CustomQuestionActivity author=(CustomQuestionActivity)test.startActivitySync(new Intent(c,CustomQuestionActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
       test.runOnMainSync(()->author.onActivityResult(410,Activity.RESULT_OK,new Intent().setData(sourceUri)));
-      waitRecognized(test,author);check(calls.size()==1,"selecting an image automatically calls the vision model once");
+      for(int i=0;i<100&&((Boolean)field(author,"importing"));i++)SystemClock.sleep(50);
+      test.runOnMainSync(()->{try{
+        check(((EditText)field(author,"body")).getText().length()==0,"default photo import leaves text unrecognized");
+        JSONArray regions=(JSONArray)field(author,"regions");
+        check(regions.length()==1&&regions.getJSONObject(0).getInt("role")==0,"default photo is the full question image");
+      }catch(Exception e){throw new RuntimeException(e);}});
+      check(calls.isEmpty(),"default photo import does not contact the model");
+      test.runOnMainSync(()->{try{((Button)field(author,"retry")).performClick();}catch(Exception e){throw new RuntimeException(e);}});
+      waitRecognized(test,author);check(calls.size()==1,"manual recognition calls the vision model once");
       String payload=calls.get(0).sent.toString("UTF-8");JSONObject requestBody=new JSONObject(payload);
       String photoUrl=requestBody.getJSONArray("messages").getJSONObject(1).getJSONArray("content").getJSONObject(1).getJSONObject("image_url").getString("url");
       check(photoUrl.startsWith("data:image/jpeg;base64,")&&payload.contains("studentMarkdown")&&payload.contains("referenceRegions"),"vision request includes source photo and typed separation schema");
@@ -93,10 +103,11 @@ final class PhotoInputChecks {
         }
       };
       test.addMonitor(cameraMonitor);
+      AppSettings.prefs(c).edit().putBoolean("autoRecognizeCustomPhoto",true).commit();
       CustomQuestionActivity camera=(CustomQuestionActivity)test.startActivitySync(new Intent(c,CustomQuestionActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
       test.runOnMainSync(()->CustomInputChecks.find(camera.getWindow().getDecorView(),"拍照识题").performClick());
       waitRecognized(test,camera);test.removeMonitor(cameraMonitor);check(calls.size()==2,"camera completion automatically recognizes captured full-resolution photo");
       test.runOnMainSync(camera::finish);
-    }finally{test.waitForIdleSync();LlmTransport.connections=previous;ProviderSettings.activate(c,active);ProviderSettings.delete(c,cfg.id);source.delete();new android.util.AtomicFile(new File(c.getFilesDir(),"custom-question-draft.json")).delete();}
+    }finally{test.waitForIdleSync();LlmTransport.connections=previous;ProviderSettings.activate(c,active);ProviderSettings.delete(c,cfg.id);AppSettings.prefs(c).edit().putBoolean("autoRecognizeCustomPhoto",oldAuto).commit();source.delete();new android.util.AtomicFile(new File(c.getFilesDir(),"custom-question-draft.json")).delete();}
   }
 }
