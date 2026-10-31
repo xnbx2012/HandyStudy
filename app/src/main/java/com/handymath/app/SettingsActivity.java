@@ -43,7 +43,9 @@ public final class SettingsActivity extends PageActivity {
     toggle("tiltShading", "启用侧锋阴影", false);
     label("关闭时保持圆形笔尖；开启后随倾斜角度产生更宽、更浅的阴影笔触。");
     toggle("pressureEraser", "开启压感橡皮", false);
-    slider("threshold", "压感橡皮阈值", .05f, 1.5f, .85f, "（超过后保持擦除，抬笔再落笔恢复）");
+    slider("threshold", "压感橡皮阈值", .05f, 1.5f, .85f, "（超过阈值后持续按住才触发）");
+    slider("pressureEraserDelay", "压感橡皮停留时间", 100, 600, 200, "毫秒（默认 200）");
+    slider("pressureEraserRadius", "压感橡皮停留半径", 5, 30, 12, "dp（超出则重新计时）");
     section("辅助书写", "");
     toggle("shapes", "一笔成形", false);
     slider("shapeDistance", "停留距离阈值", 2, 40, 12, "dp（允许轻微手抖）");

@@ -109,8 +109,11 @@ final class InkView extends View {
       pressureEraser = false,
       shapes = false,
       correction = false;
-  float pressureThreshold = .85f, shapeDistance = 12;
-  long shapeHoldMillis = 450;
+  float pressureThreshold = .85f, pressureEraserRadius = 12, shapeDistance = 12;
+  long pressureEraserDelayMillis = 200, shapeHoldMillis = 450;
+  private long pressureHoldSince;
+  private float pressureHoldX, pressureHoldY, pressureLastX, pressureLastY, pressureLastValue;
+  private final Runnable pressureEraserCheck = this::activatePressureEraser;
   boolean annotationSurface = false, tiltShading = false, exporting = false;
   private final android.os.Handler shapeHandler =
       new android.os.Handler(android.os.Looper.getMainLooper());
@@ -169,6 +172,8 @@ final class InkView extends View {
       current = null; pointer = -1; rebuild();
     }
     shapeHandler.removeCallbacks(shapeCheck);
+    shapeHandler.removeCallbacks(pressureEraserCheck);
+    pressureHoldSince = 0;
     shapeHandler.removeCallbacks(expirePrediction);
     predicted = null; contactPen = false; predictionContactStarted = false; cursorVisible = false; dragging = false;
     adapter.writing(false);
@@ -808,6 +813,8 @@ final class InkView extends View {
         live.clear();
         boolean snapped = shapes && !current.erase && shapeApplied;
         shapeHandler.removeCallbacks(shapeCheck);
+        shapeHandler.removeCallbacks(pressureEraserCheck);
+        pressureHoldSince = 0;
         cursorEraser = current.erase;
         current = null;
         if (snapped) rebuild();
@@ -851,6 +858,8 @@ final class InkView extends View {
       touched.clear();
       live.clear();
       shapeApplied = false;
+      pressureHoldSince = 0;
+      shapeHandler.removeCallbacks(pressureEraserCheck);
       stationaryIndex = 0;
       stationarySince = SystemClock.uptimeMillis();
       shapeHandler.removeCallbacks(shapeCheck);
@@ -913,7 +922,8 @@ final class InkView extends View {
             : adapter.historicalPressure(e, i, h);
     float holdDistance =
         (float) Math.hypot(worldX(x) - stationaryX, worldY(y) - stationaryY) * zoom;
-    if (shapeApplied && holdDistance <= shapeDistance && !(pressureEraser && p > pressureThreshold))
+    updatePressureEraser(p, x, y);
+    if (shapeApplied && holdDistance <= shapeDistance && (current == null || !current.erase))
       return;
     if (holdDistance > shapeDistance) {
       stationaryIndex = current.dots.size();
@@ -924,23 +934,6 @@ final class InkView extends View {
       stationaryX = worldX(x);
       stationaryY = worldY(y);
     }
-    boolean auto = pressureEraser && p > pressureThreshold;
-    if (!eraser && !adapter.eraser(e, i) && !current.erase && auto && !current.dots.isEmpty()) {
-      strokes.add(current);
-      for (long k : touched) cache.remove(k);
-      touched.clear();
-      live.clear();
-      Stroke next = new Stroke();
-      next.color = penColor;
-      next.erase = auto;
-      next.width = auto ? 36 : penWidth;
-      current = next;
-      predicted = null;
-      adapter.writing(false);
-    } else if (current.dots.isEmpty() && auto) {
-      current.erase = true;
-      current.width = 36;
-    }
     float tilt = h < 0 ? e.getAxisValue(MotionEvent.AXIS_TILT, i) : e.getHistoricalAxisValue(MotionEvent.AXIS_TILT, i, h);
     float orientation = h < 0 ? e.getAxisValue(MotionEvent.AXIS_ORIENTATION, i) : e.getHistoricalAxisValue(MotionEvent.AXIS_ORIENTATION, i, h);
     if (!Float.isFinite(tilt)) tilt = 0;
@@ -949,6 +942,59 @@ final class InkView extends View {
         a = current.dots.isEmpty() ? d : current.dots.get(current.dots.size() - 1);
     current.dots.add(d);
     indexSegment(new Segment(a, d, current, serial++), true);
+  }
+
+  private void updatePressureEraser(float p, float x, float y) {
+    if (current == null || current.erase || eraser || !pressureEraser) return;
+    long now = SystemClock.uptimeMillis();
+    if (p <= pressureThreshold) {
+      pressureHoldSince = 0;
+      shapeHandler.removeCallbacks(pressureEraserCheck);
+      return;
+    }
+    pressureLastX = x;
+    pressureLastY = y;
+    pressureLastValue = p;
+    float wx = worldX(x), wy = worldY(y);
+    if (pressureHoldSince == 0 || Math.hypot(wx - pressureHoldX, wy - pressureHoldY) * zoom > pressureEraserRadius) {
+      pressureHoldSince = now;
+      pressureHoldX = wx;
+      pressureHoldY = wy;
+      shapeHandler.removeCallbacks(pressureEraserCheck);
+      shapeHandler.postDelayed(pressureEraserCheck, pressureEraserDelayMillis);
+    } else if (now - pressureHoldSince >= pressureEraserDelayMillis) {
+      activatePressureEraser();
+    }
+  }
+
+  private void activatePressureEraser() {
+    if (current == null || current.erase || eraser || !pressureEraser || pressureHoldSince == 0
+        || pressureLastValue <= pressureThreshold
+        || SystemClock.uptimeMillis() - pressureHoldSince < pressureEraserDelayMillis
+        || Math.hypot(worldX(pressureLastX) - pressureHoldX,
+            worldY(pressureLastY) - pressureHoldY) * zoom > pressureEraserRadius) return;
+    pressureHoldSince = 0;
+    shapeHandler.removeCallbacks(pressureEraserCheck);
+    if (!current.dots.isEmpty()) {
+      strokes.add(current);
+      for (long k : touched) cache.remove(k);
+      touched.clear();
+      live.clear();
+    }
+    Stroke next = new Stroke();
+    next.color = penColor;
+    next.erase = true;
+    next.width = 36;
+    current = next;
+    Dot dot = new Dot(worldX(pressureLastX), worldY(pressureLastY), pressureLastValue);
+    current.dots.add(dot);
+    indexSegment(new Segment(dot, dot, current, serial++), true);
+    predicted = null;
+    shapeApplied = false;
+    shapeHandler.removeCallbacks(shapeCheck);
+    adapter.writing(false);
+    cursorEraser = true;
+    invalidate();
   }
 
   @Override public boolean onDragEvent(DragEvent event) {

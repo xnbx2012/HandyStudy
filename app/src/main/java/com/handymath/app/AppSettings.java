@@ -25,6 +25,8 @@ final class AppSettings {
         v.tiltShading = p.getBoolean("tiltShading", false);
         v.pressureEraser = p.getBoolean("pressureEraser", false);
         v.pressureThreshold = p.getFloat("threshold", .85f);
+        v.pressureEraserDelayMillis = (long) p.getFloat("pressureEraserDelay", 200);
+        v.pressureEraserRadius = p.getFloat("pressureEraserRadius", 12);
         v.shapeDistance = p.getFloat("shapeDistance", 12);
         v.shapeHoldMillis = (long) p.getFloat("shapeHold", 450);
         v.shapes = p.getBoolean("shapes", false);

@@ -8,10 +8,6 @@ import org.json.JSONObject;
 
 /** Sanitized Markdown and KaTeX served exclusively from packaged local assets. */
 final class MathView extends WebView {
-  static {
-    WebView.enableSlowWholeDocumentDraw();
-  }
-
   private String markdown = "";
   private boolean ready = false, streaming = false, disposed = false;
 

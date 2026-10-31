@@ -80,7 +80,7 @@ final class CustomInputChecks {
       }
     }
     check(textPixels,"actual rendered AI image contains typed glyphs, not only ruling");
-    JSONObject draft=new JSONObject().put("title","混合输入回归题").put("body","求 x + 1 = 4 的解，并说明理由。").put("reference","");
+    JSONObject draft=new JSONObject().put("title","混合输入回归题").put("body","求 $$x + 1 = 4$$ 的解，并说明理由。").put("reference","");
     String id=CustomQuestionActivity.saveQuestion(c,draft,document);
     BankRepository bank=BankRepository.loadLocation(c,"custom-questions");
     BankRepository.Question question=null; for(BankRepository.Question q:bank.questions)if(q.id.equals(id))question=q;
@@ -92,11 +92,14 @@ final class CustomInputChecks {
     java.util.concurrent.atomic.AtomicInteger requests=new java.util.concurrent.atomic.AtomicInteger();
     String recognition=new JSONObject().put("transcription","改为 x = 3，我在这一步不会了").put("finalAnswer","3").put("choice","").put("readable",true).put("confidence",.95).toString();
     String tags=new JSONObject().put("knowledgePoints",new JSONArray().put("一元一次方程")).put("examPoints",new JSONArray().put("等式性质")).put("questionType","解答题").put("difficulty",1).toString();
-    String grade=new JSONObject().put("score",6).put("correct",false).put("feedback","结果正确，请补充等式变形步骤。").put("weaknesses",new JSONArray()).toString();
+    String grade=new JSONObject(recognition).put("score",6).put("correct",false)
+        .put("feedback","结果正确，请补充等式变形步骤。").put("weaknesses",new JSONArray())
+        .put("tags",new JSONObject(tags)).toString();
     try {
-      LlmTransport.connections=url->new Fake(url,new JSONObject().put("choices",new JSONArray().put(new JSONObject().put("message",new JSONObject().put("content",requests.getAndIncrement()==0?recognition:requests.get()==2?grade:tags)).put("finish_reason","stop"))).toString());
+      LlmTransport.connections=url->new Fake(url,new JSONObject().put("choices",new JSONArray().put(new JSONObject().put("message",new JSONObject().put("content",grade)).put("finish_reason","stop"))).toString());
       TutorClient.Reply reply=TutorClient.ask(cfg,bank,question,sheets,TutorClient.Mode.GRADE,0,new JSONArray());
-      check(reply.score==6&&reply.studentWork.contains("不会"),"custom mixed answer reaches recognition and grading");
+      check(reply.score==6&&reply.studentWork.contains("不会"),"custom mixed answer reaches unified grading");
+      check(reply.tags.getJSONArray("knowledgePoints").length()==1,"unified grading includes classification");
       LlmTransport.connections=url->new Fake(url,new JSONObject().put("choices",new JSONArray().put(new JSONObject().put("message",new JSONObject().put("content",new JSONObject().put("hint","先用等式性质移项。").put("feedback","").toString())).put("finish_reason","stop"))).toString());
       check(!TutorClient.ask(cfg,bank,question,Collections.emptyList(),TutorClient.Mode.HINT,1,new JSONArray()).hint.isEmpty(),"custom question supports existing hint flow");
       requests.set(0);

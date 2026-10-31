@@ -47,8 +47,16 @@ final class StylusChecks {
       InkView.Document parsed=InkView.Document.parse(ink.serialize());check(Math.abs(parsed.strokes.get(0).dots.get(1).tilt-.8)<.001,"axis values round trip");
       InkView.Stroke shade=ink.strokes.get(0).copy();float plain=InkView.radius(dot,shade);shade.shade=true;check(InkView.radius(dot,shade)>plain,"opt-in tilt broadens shading while round pen remains default");
       ink.clear();ink.pressureEraser=true;ink.pressureThreshold=.8f;
+      ink.pressureEraserDelayMillis=200;ink.pressureEraserRadius=12;
       pen(ink,0,100,.3f);pen(ink,2,150,1);
-      check(ink.strokes.size()==1,"pressure switch creates provisional fragment");
+      check(ink.strokes.isEmpty(),"brief high pressure does not switch to eraser");
+      pen(ink,2,250,1);
+      check(ink.strokes.isEmpty(),"moving outside hold radius restarts the delay");
+      java.lang.reflect.Field pressureSince=InkView.class.getDeclaredField("pressureHoldSince");
+      pressureSince.setAccessible(true);
+      pressureSince.setLong(ink,SystemClock.uptimeMillis()-201);
+      pen(ink,2,250,1);
+      check(ink.strokes.size()==1,"stationary high pressure after delay creates provisional fragment");
       check(ink.serialize().getJSONArray("strokes").length()==0,"provisional pressure fragments never enter a snapshot");
       pen(ink,MotionEvent.ACTION_CANCEL,150,.5f);check(ink.strokes.isEmpty(),"cancel rolls back all fragments of the contact");
       if(Build.VERSION.SDK_INT>=33){
@@ -79,7 +87,7 @@ final class StylusChecks {
     if(failure.get()!=null)throw new AssertionError(failure.get());
     String[] permissions=c.getPackageManager().getPackageInfo(c.getPackageName(),android.content.pm.PackageManager.GET_PERMISSIONS).requestedPermissions;
     check(permissions==null||!Arrays.asList(permissions).contains("android.permission.QUERY_ALL_PACKAGES"),"SDK does not add broad package visibility permission");
-    MainActivity main=(MainActivity)test.startActivitySync(new Intent(c,MainActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK).putExtra("bankLocation","@builtin/wzx-basic"));test.waitForIdleSync();SystemClock.sleep(300);
+    MainActivity main=(MainActivity)test.startActivitySync(new Intent(c,MainActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK).putExtra("bankLocation","@builtin/sample"));test.waitForIdleSync();SystemClock.sleep(300);
     AtomicInteger toggle=new AtomicInteger(),palette=new AtomicInteger();XiaomiStylusAdapter gesture=new XiaomiStylusAdapter();
     boolean old=AppSettings.enabled(c,"doubleTap",true);AppSettings.prefs(c).edit().putBoolean("doubleTap",true).commit();
     try{test.runOnMainSync(()->{

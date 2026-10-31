@@ -176,7 +176,10 @@ public final class MainActivity extends Activity {
   }
 
   private void base() {
-    if (root != null) MathView.releaseTree(root);
+    if (root != null) {
+      releasePreviewImages(root);
+      MathView.releaseTree(root);
+    }
     root = column();
     root.setBackgroundColor(BG);
     root.setPadding(dp(16), dp(8), dp(16), dp(10));
@@ -634,13 +637,29 @@ public final class MainActivity extends Activity {
 
   private void addImage(LinearLayout target, String path, int max) throws Exception {
     ImageView v = new ImageView(this);
-    v.setImageBitmap(bank.image(path));
+    android.graphics.Bitmap preview = bank.preview(path,
+        Math.max(800, getResources().getDisplayMetrics().widthPixels), 1400);
+    v.setImageBitmap(preview);
+    v.setTag(preview);
     v.setAdjustViewBounds(true);
     v.setMaxHeight(max);
     v.setScaleType(ImageView.ScaleType.FIT_CENTER);
     v.setContentDescription("题面或解析图片，可缩放查看");
     target.addView(v, new LinearLayout.LayoutParams(-1, -2));
     v.setOnClickListener(w -> showImage(path));
+  }
+
+  private void releasePreviewImages(View view) {
+    if (view instanceof ImageView && view.getTag() instanceof android.graphics.Bitmap) {
+      ImageView image = (ImageView) view;
+      android.graphics.Bitmap bitmap = (android.graphics.Bitmap) image.getTag();
+      image.setImageDrawable(null);
+      image.setTag(null);
+      bitmap.recycle();
+    } else if (view instanceof ViewGroup) {
+      ViewGroup group = (ViewGroup) view;
+      for (int i = 0; i < group.getChildCount(); i++) releasePreviewImages(group.getChildAt(i));
+    }
   }
 
   private void showImage(String path) {
@@ -1792,7 +1811,10 @@ public final class MainActivity extends Activity {
     if (bankImportDialog != null) { bankImportDialog.dismiss(); bankImportDialog = null; }
     worker.shutdownNow();
     saver.shutdown();
-    if (root != null) MathView.releaseTree(root);
+    if (root != null) {
+      releasePreviewImages(root);
+      MathView.releaseTree(root);
+    }
     super.onDestroy();
   }
 

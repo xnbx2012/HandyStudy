@@ -166,6 +166,21 @@ public final class BankRepository {
     return new FileInputStream(file);
   }
 
+  Bitmap preview(String path, int width, int height) throws IOException {
+    BitmapFactory.Options opts = new BitmapFactory.Options();
+    opts.inJustDecodeBounds = true;
+    try (InputStream in = open(path)) { BitmapFactory.decodeStream(in, null, opts); }
+    int sample = 1;
+    while (opts.outWidth / sample > width || opts.outHeight / sample > height) sample *= 2;
+    opts.inJustDecodeBounds = false;
+    opts.inSampleSize = sample;
+    try (InputStream in = open(path)) {
+      Bitmap bitmap = BitmapFactory.decodeStream(in, null, opts);
+      if (bitmap == null) throw new IOException("无法读取题库图片");
+      return bitmap;
+    }
+  }
+
   Bitmap image(String path) throws IOException {
     BitmapFactory.Options opts = new BitmapFactory.Options();
     opts.inJustDecodeBounds = true;
